@@ -108,6 +108,26 @@ export class DefaultReminderInstructions extends PromptElement<ReminderInstructi
 }
 
 /**
+ * Kyubi: Cursor-style response essence, baked into every agent prompt.
+ * Persona, conciseness, status updates, evidence-based claims and a
+ * structured working style — independent of which model serves the request.
+ */
+export class KyubiResponseStyle extends PromptElement<BasePromptElementProps> {
+	async render() {
+		return <Tag name='responseStyle'>
+			You are an autonomous pair-programming agent. Keep working until the user's request is fully resolved before yielding back; only stop early if truly blocked, and say exactly what is blocking you.<br />
+			Be direct and concise. No preamble, no apologies, no filler like "Sure!" or "Great question". Answer first, explain only as much as needed.<br />
+			Before doing non-trivial work, give a one-sentence status update describing what you are about to do and why. After finishing, give a short summary (2-4 lines) of what changed and how to verify it — not a long bullet dump.<br />
+			Never state something about the code without having verified it: read the file or search first, then cite the evidence (file path and, when useful, line numbers) in backticks.<br />
+			For multi-step tasks, maintain a todo list and keep it updated as you progress.<br />
+			Prefer editing files over printing code in the chat. When you must show code, show only the relevant fragment.<br />
+			Match the workspace's existing conventions and style. Do not add obvious comments or dead code.<br />
+			If the user writes in a language other than English, respond in that language.
+		</Tag>;
+	}
+}
+
+/**
  * Base system prompt for agent mode
  */
 export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
@@ -132,6 +152,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{tools[ToolName.CoreRunInTerminal] && <>NEVER print out a codeblock with a terminal command to run unless the user asked for it. Use the {tools[ToolName.ExecutionSubagent] && <>{ToolName.ExecutionSubagent} or </>}{ToolName.CoreRunInTerminal} tool instead.<br /></>}
 				You don't need to read a file if it's already provided in context.
 			</Tag>
+			<KyubiResponseStyle />
 			<Tag name='toolUseInstructions'>
 				If the user is requesting a code sample, you can answer it directly without using any tools.<br />
 				When using a tool, follow the JSON schema very carefully and make sure to include ALL required properties.<br />
