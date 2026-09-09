@@ -1241,7 +1241,6 @@ export class GettingStartedPage extends EditorPane {
 				title: localize('walkthroughs', "Walkthroughs"),
 				klass: 'getting-started',
 				limit: 5,
-				footer: $('span.button-link.see-all-walkthroughs', { 'x-dispatch': 'seeAllWalkthroughs', 'tabindex': 0 }, localize('showAll', "More...")),
 				renderElement: renderGetttingStaredWalkthrough,
 				rankElement: rankWalkthrough,
 				contextService: this.contextService,
