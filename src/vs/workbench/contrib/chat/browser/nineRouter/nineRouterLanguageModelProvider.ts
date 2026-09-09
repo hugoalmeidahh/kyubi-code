@@ -15,7 +15,9 @@ import { listenStream } from '../../../../../base/common/stream.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
 import { ILogService } from '../../../../../platform/log/common/log.js';
+import { IMainProcessService } from '../../../../../platform/ipc/common/mainProcessService.js';
 import { asText, IRequestService } from '../../../../../platform/request/common/request.js';
+import { RequestChannelClient } from '../../../../../platform/request/common/requestIpc.js';
 import { ISecretStorageService } from '../../../../../platform/secrets/common/secrets.js';
 import {
 	ChatMessageRole,
@@ -44,6 +46,25 @@ interface IOpenAIToolCallDelta {
 	function?: { name?: string; arguments?: string };
 }
 
+/** Streaming state for inline `<think>...</think>` reasoning tags in `content`. */
+interface IThinkTagState {
+	/** Currently inside a `<think>` block. */
+	inThink: boolean;
+	/** Tail of the previous chunk that could be the start of a split tag. */
+	pending: string;
+}
+
+/** Length of the longest suffix of `text` that is a proper prefix of `tag`. */
+function trailingPartialTagLength(text: string, tag: string): number {
+	const max = Math.min(text.length, tag.length - 1);
+	for (let len = max; len > 0; len--) {
+		if (text.endsWith(tag.substring(0, len))) {
+			return len;
+		}
+	}
+	return 0;
+}
+
 /**
  * Language model provider backed by a local/remote 9Router gateway
  * (OpenAI-compatible API). Lists models from `GET /v1/models` and streams
@@ -58,13 +79,22 @@ export class NineRouterLanguageModelProvider extends Disposable implements ILang
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	readonly onDidChange = this._onDidChange.event;
 
+	/**
+	 * HTTP goes through the *main process* (`request` IPC channel) — the
+	 * renderer's `fetch`/window request service is subject to CORS from the
+	 * `vscode-file://` origin, which most gateways won't answer preflights for.
+	 */
+	private readonly _requestService: IRequestService;
+
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@ISecretStorageService private readonly _secretStorageService: ISecretStorageService,
-		@IRequestService private readonly _requestService: IRequestService,
+		@IMainProcessService mainProcessService: IMainProcessService,
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
+
+		this._requestService = new RequestChannelClient(mainProcessService.getChannel('request'));
 
 		// Re-resolve models when the base URL or the stored API key changes.
 		this._register(this._configurationService.onDidChangeConfiguration(e => {
@@ -148,12 +178,18 @@ export class NineRouterLanguageModelProvider extends Disposable implements ILang
 			isDefaultForLocation: {},
 			capabilities: { toolCalling: true, vision: true, agentMode: true },
 		};
-		return { metadata, identifier: `${NINE_ROUTER_VENDOR}|${model.id}` };
+		// IMPORTANT: `vendor/model-id` — the extension host extracts the vendor
+		// from the identifier by splitting on the first `/` (see
+		// extHostLanguageModels.getVendorFromModelIdentifier).
+		return { metadata, identifier: `${NINE_ROUTER_VENDOR}/${model.id}` };
 	}
 
 	async sendChatRequest(modelId: string, messages: IChatMessage[], _from: ExtensionIdentifier | undefined, options: ILanguageModelChatRequestOptions, token: CancellationToken): Promise<ILanguageModelChatResponse> {
+		// `modelId` is the internal identifier `9router/<gateway-model-id>` — strip
+		// the vendor prefix, the gateway only knows its own ids (e.g. `cc/claude-opus-5`).
+		const gatewayModelId = modelId.startsWith(`${NINE_ROUTER_VENDOR}/`) ? modelId.slice(NINE_ROUTER_VENDOR.length + 1) : modelId;
 		const body: Record<string, unknown> = {
-			model: modelId,
+			model: gatewayModelId,
 			messages: messages.map(m => this._toOpenAIMessage(m)).flat(),
 			stream: true,
 			...(options.modelOptions ?? {}),
@@ -189,6 +225,9 @@ export class NineRouterLanguageModelProvider extends Disposable implements ILang
 		// Accumulate tool call deltas keyed by index — OpenAI streams
 		// arguments as string fragments across many chunks.
 		const toolCalls = new Map<number, { id: string; name: string; args: string }>();
+		// Some models (DeepSeek/Qwen-style) emit reasoning inline in `content` as
+		// `<think>...</think>` instead of `reasoning_content`. Track it across chunks.
+		const thinkState: IThinkTagState = { inThink: false, pending: '' };
 		let buffer = '';
 		let done = false;
 
@@ -196,6 +235,11 @@ export class NineRouterLanguageModelProvider extends Disposable implements ILang
 			const finish = () => {
 				if (done) { return; }
 				done = true;
+				// Flush anything held back while waiting for a possible split `<think>` tag.
+				if (thinkState.pending) {
+					source.emitOne(thinkState.inThink ? { type: 'thinking', value: thinkState.pending } : { type: 'text', value: thinkState.pending });
+					thinkState.pending = '';
+				}
 				this._flushToolCalls(toolCalls, source);
 				source.resolve();
 				resolve({});
@@ -221,7 +265,7 @@ export class NineRouterLanguageModelProvider extends Disposable implements ILang
 							finish();
 							return;
 						}
-						this._handleSseChunk(data, toolCalls, source);
+						this._handleSseChunk(data, toolCalls, thinkState, source);
 					}
 				},
 				onEnd: finish,
@@ -230,7 +274,7 @@ export class NineRouterLanguageModelProvider extends Disposable implements ILang
 		});
 	}
 
-	private _handleSseChunk(data: string, toolCalls: Map<number, { id: string; name: string; args: string }>, source: AsyncIterableSource<IChatResponsePart>): void {
+	private _handleSseChunk(data: string, toolCalls: Map<number, { id: string; name: string; args: string }>, thinkState: IThinkTagState, source: AsyncIterableSource<IChatResponsePart>): void {
 		let parsed: { choices?: { delta?: { content?: string; reasoning_content?: string; tool_calls?: IOpenAIToolCallDelta[] }; finish_reason?: string | null }[] };
 		try {
 			parsed = JSON.parse(data);
@@ -246,7 +290,7 @@ export class NineRouterLanguageModelProvider extends Disposable implements ILang
 			source.emitOne({ type: 'thinking', value: delta.reasoning_content });
 		}
 		if (delta?.content) {
-			source.emitOne({ type: 'text', value: delta.content });
+			this._emitContent(delta.content, thinkState, source);
 		}
 		for (const toolDelta of delta?.tool_calls ?? []) {
 			const existing = toolCalls.get(toolDelta.index) ?? { id: '', name: '', args: '' };
@@ -257,6 +301,39 @@ export class NineRouterLanguageModelProvider extends Disposable implements ILang
 		}
 		if (choice.finish_reason === 'tool_calls') {
 			this._flushToolCalls(toolCalls, source);
+		}
+	}
+
+	/**
+	 * Emits `content` deltas, converting inline `<think>...</think>` reasoning
+	 * (DeepSeek/Qwen-style) into `thinking` parts instead of showing the raw tags.
+	 * Tags can be split across SSE chunks, so a partial tag prefix at the end of a
+	 * chunk is held back in `state.pending` until the next chunk decides it.
+	 */
+	private _emitContent(content: string, state: IThinkTagState, source: AsyncIterableSource<IChatResponsePart>): void {
+		let text = state.pending + content;
+		state.pending = '';
+
+		while (text.length) {
+			const tag = state.inThink ? '</think>' : '<think>';
+			const idx = text.indexOf(tag);
+			if (idx !== -1) {
+				const before = text.substring(0, idx);
+				if (before) {
+					source.emitOne(state.inThink ? { type: 'thinking', value: before } : { type: 'text', value: before });
+				}
+				state.inThink = !state.inThink;
+				text = text.substring(idx + tag.length);
+				continue;
+			}
+			// No full tag — hold back a trailing partial-tag prefix (e.g. "<thi") for the next chunk.
+			const held = trailingPartialTagLength(text, tag);
+			const emit = text.substring(0, text.length - held);
+			state.pending = held ? text.substring(text.length - held) : '';
+			if (emit) {
+				source.emitOne(state.inThink ? { type: 'thinking', value: emit } : { type: 'text', value: emit });
+			}
+			return;
 		}
 	}
 

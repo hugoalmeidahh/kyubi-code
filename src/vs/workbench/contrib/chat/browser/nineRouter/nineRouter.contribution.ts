@@ -9,7 +9,9 @@
 import { Disposable, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { localize, localize2 } from '../../../../../nls.js';
 import { Action2, registerAction2 } from '../../../../../platform/actions/common/actions.js';
+import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { IConfigurationRegistry, Extensions as ConfigurationExtensions } from '../../../../../platform/configuration/common/configurationRegistry.js';
+import { IDialogService } from '../../../../../platform/dialogs/common/dialogs.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IQuickInputService } from '../../../../../platform/quickinput/common/quickInput.js';
 import { Registry } from '../../../../../platform/registry/common/platform.js';
@@ -64,7 +66,38 @@ registerAction2(class SetNineRouterApiKeyAction extends Action2 {
 	}
 });
 
-// --- 3) Workbench contribution: registers vendor + provider on startup ------
+// --- 3) Command: clears all 9Router configuration (API key + base URL) ------
+
+registerAction2(class ClearNineRouterConfigAction extends Action2 {
+	constructor() {
+		super({
+			id: 'chat.nineRouter.clearConfiguration',
+			title: localize2('nineRouter.clearConfiguration', "9Router: Clear Configuration"),
+			f1: true,
+		});
+	}
+
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const secretStorageService = accessor.get(ISecretStorageService);
+		const configurationService = accessor.get(IConfigurationService);
+		const dialogService = accessor.get(IDialogService);
+
+		const { confirmed } = await dialogService.confirm({
+			message: localize('nineRouter.clearConfirm', "Clear all 9Router configuration?"),
+			detail: localize('nineRouter.clearConfirmDetail', "This removes the stored API key and resets the base URL. The 9Router models will disappear from the model picker."),
+			primaryButton: localize('nineRouter.clearConfirmButton', "Clear"),
+		});
+		if (!confirmed) {
+			return;
+		}
+
+		await secretStorageService.delete(NINE_ROUTER_API_KEY_SECRET);
+		await configurationService.updateValue(NINE_ROUTER_BASE_URL_SETTING, undefined);
+		// The provider listens to both changes and re-resolves (now empty) models.
+	}
+});
+
+// --- 4) Workbench contribution: registers vendor + provider on startup ------
 
 class NineRouterContribution extends Disposable implements IWorkbenchContribution {
 

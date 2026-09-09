@@ -424,8 +424,32 @@ export class ExtHostLanguageModels implements ExtHostLanguageModelsShape {
 			// Call proxy directly: routing through `selectLanguageModels` would recurse here for every identifier and blow up when the cache stays empty (provider in another ext host).
 			await this._proxy.$selectChatModels({ vendor, extension: extension.identifier });
 			if (!this._localModels.has(modelId)) {
-				this._logService.warn(`[LanguageModelProxy](${extension.identifier.value}) Could not find model '${modelId}' in local cache after re-resolving models.`);
-				return undefined;
+				// The provider may live in the *renderer* (a core workbench provider, e.g. 9Router)
+				// rather than in any extension host — then `$provideLanguageModelChatInfo` is never
+				// routed here and the local cache stays empty. Ask the main thread for the metadata
+				// and register a local stub; requests go through `$tryStartChatRequest`, which the
+				// main thread routes to the workbench LM service (and thus to the core provider).
+				const metadata = await this._proxy.$lookupLanguageModel(modelId);
+				if (!metadata) {
+					this._logService.warn(`[LanguageModelProxy](${extension.identifier.value}) Could not find model '${modelId}' in local cache after re-resolving models.`);
+					return undefined;
+				}
+				this._localModels.set(modelId, {
+					group: undefined,
+					metadata,
+					info: {
+						id: metadata.id,
+						name: metadata.name,
+						family: metadata.family,
+						version: metadata.version,
+						maxInputTokens: metadata.maxInputTokens,
+						maxOutputTokens: metadata.maxOutputTokens,
+						capabilities: {
+							imageInput: metadata.capabilities?.vision,
+							toolCalling: metadata.capabilities?.toolCalling,
+						},
+					},
+				});
 			}
 		}
 
@@ -634,8 +658,12 @@ export class ExtHostLanguageModels implements ExtHostLanguageModelsShape {
 		if (!data) {
 			throw extHostTypes.LanguageModelError.NotFound(`Language model '${modelId}' is unknown.`);
 		}
-		return this._languageModelProviders.get(data.metadata.vendor)?.provider.provideTokenCount(data.info, value, token) ?? 0;
-		// return this._proxy.$countTokens(languageModelId, (typeof value === 'string' ? value : typeConvert.LanguageModelChatMessage2.from(value)), token);
+		const localProvider = this._languageModelProviders.get(data.metadata.vendor);
+		if (localProvider) {
+			return localProvider.provider.provideTokenCount(data.info, value, token) ?? 0;
+		}
+		// Provider lives in the renderer (core provider, e.g. 9Router) — count via the main thread.
+		return this._proxy.$countTokens(modelId, (typeof value === 'string' ? value : typeConvert.LanguageModelChatMessage2.from(value)), token);
 	}
 
 	$updateModelAccesslist(data: { from: ExtensionIdentifier; to: ExtensionIdentifier; enabled: boolean }[]): void {
