@@ -23,6 +23,40 @@
 
 	//#region Splash Screen Helpers
 
+	// Kyubi Code: inline splash logo (128px PNG, base64) shown centered while the workbench loads
+	const KYUBI_SPLASH_LOGO = 'data:image/png;base64,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';
+
+	function showKyubiLogo(splash: HTMLElement) {
+		const logoContainer = document.createElement('div');
+		logoContainer.style.position = 'absolute';
+		logoContainer.style.top = '0';
+		logoContainer.style.left = '0';
+		logoContainer.style.width = '100vw';
+		logoContainer.style.height = '100vh';
+		logoContainer.style.display = 'flex';
+		logoContainer.style.alignItems = 'center';
+		logoContainer.style.justifyContent = 'center';
+		logoContainer.style.zIndex = '2';
+		logoContainer.style.pointerEvents = 'none';
+
+		const logo = document.createElement('img');
+		logo.src = KYUBI_SPLASH_LOGO;
+		logo.style.width = '96px';
+		logo.style.height = '96px';
+		logo.style.opacity = '0';
+		logo.style.transition = 'opacity 300ms ease-in';
+		logo.style.animation = 'kyubi-splash-pulse 1.6s ease-in-out 300ms infinite';
+
+		const style = document.createElement('style');
+		style.textContent = '@keyframes kyubi-splash-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.94); } }';
+		logoContainer.appendChild(style);
+
+		logoContainer.appendChild(logo);
+		splash.appendChild(logoContainer);
+
+		requestAnimationFrame(() => { logo.style.opacity = '1'; });
+	}
+
 	function showSplash(configuration: INativeWindowConfiguration) {
 		performance.mark('code/willShowPartsSplash');
 		showDefaultSplash(configuration);
@@ -479,6 +513,15 @@
 				}
 			}
 
+			showKyubiLogo(splash);
+
+			window.document.body.appendChild(splash);
+		} else {
+			// No stored layout info: still show the Kyubi logo centered on the shell background
+			const splash = document.createElement('div');
+			splash.id = 'monaco-parts-splash';
+			splash.className = baseTheme ?? 'vs-dark';
+			showKyubiLogo(splash);
 			window.document.body.appendChild(splash);
 		}
 	}
