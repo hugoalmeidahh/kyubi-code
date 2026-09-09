@@ -225,47 +225,53 @@ export const startEntries: GettingStartedStartEntryContent = [
 
 const Button = (title: string, href: string) => `[${title}](${href})`;
 
-const CopilotStepTitle = localize('gettingStarted.copilotSetup.title', "Use AI features with Copilot for free");
-const CopilotDescription = localize({ key: 'gettingStarted.copilotSetup.description', comment: ['{Locked="["}', '{Locked="]({0})"}'] }, "You can use [Copilot]({0}) to generate code across multiple files, fix errors, ask questions about your code, and much more using natural language.", defaultChat.documentationUrl ?? '');
-const CopilotTermsString = localize({ key: 'gettingStarted.copilotSetup.terms', comment: ['{Locked="]({2})"}', '{Locked="]({3})"}'] }, "By continuing with {0} Copilot, you agree to {1}'s [Terms]({2}) and [Privacy Statement]({3})", defaultChat.provider.default.name, defaultChat.provider.default.name, defaultChat.termsStatementUrl, defaultChat.privacyStatementUrl);
-const CopilotAnonymousButton = Button(localize('setupCopilotButton.setup', "Use AI Features"), `command:workbench.action.chat.triggerSetupAnonymousWithoutDialog`);
-const CopilotSignedOutButton = Button(localize('setupCopilotButton.setup', "Use AI Features"), `command:workbench.action.chat.triggerSetup`);
-const CopilotSignedInButton = Button(localize('setupCopilotButton.setup', "Use AI Features"), `command:workbench.action.chat.triggerSetup`);
-const CopilotCompleteButton = Button(localize('setupCopilotButton.chatWithCopilot', "Start to Chat"), 'command:workbench.action.chat.open');
-
-function createCopilotSetupStep(id: string, button: string, when: string, includeTerms: boolean): BuiltinGettingStartedStep {
-	const description = includeTerms ?
-		`${CopilotDescription}\n${CopilotTermsString}\n${button}` :
-		`${CopilotDescription}\n${button}`;
-
-	return {
-		id,
-		title: CopilotStepTitle,
-		description,
-		when: `${when} && !chatSetupHidden && !chatSetupDisabledInWorkspace`,
-		media: {
-			type: 'svg', altText: 'VS Code Copilot multi file edits', path: 'multi-file-edits.svg'
-		},
-	};
-}
-
 export const walkthroughs: GettingStartedWalkthroughContent = [
 	{
 		id: 'Setup',
-		title: localize('gettingStarted.setup.title', "Get started with VS Code"),
-		description: localize('gettingStarted.setup.description', "Customize your editor, learn the basics, and start coding"),
+		title: localize('gettingStarted.setup.title', "Get started with Kyubi Code"),
+		description: localize('gettingStarted.setup.description', "Connect your AI gateway, customize your editor and start coding"),
 		isFeatured: true,
 		icon: setupIcon,
 		when: '!isWeb',
-		walkthroughPageTitle: localize('gettingStarted.setup.walkthroughPageTitle', 'Setup VS Code'),
+		walkthroughPageTitle: localize('gettingStarted.setup.walkthroughPageTitle', 'Setup Kyubi Code'),
 		next: 'Beginner',
 		content: {
 			type: 'steps',
 			steps: [
-				createCopilotSetupStep('CopilotSetupAnonymous', CopilotAnonymousButton, 'chatAnonymous && !chatSetupCompleted', true),
-				createCopilotSetupStep('CopilotSetupSignedOut', CopilotSignedOutButton, 'chatEntitlementSignedOut && !chatAnonymous && !github.copilot.hasByokModels', false),
-				createCopilotSetupStep('CopilotSetupComplete', CopilotCompleteButton, 'chatSetupCompleted && !chatSetupDisabled && (chatAnonymous || chatPlanPro || chatPlanProPlus || chatPlanMax || chatPlanBusiness || chatPlanEnterprise || chatPlanFree)', false),
-				createCopilotSetupStep('CopilotSetupSignedIn', CopilotSignedInButton, '!chatEntitlementSignedOut && (!chatSetupCompleted || chatSetupDisabled || chatPlanCanSignUp)', false),
+				{
+					id: 'nineRouterBaseUrl',
+					title: localize('gettingStarted.nineRouter.baseUrl.title', "Connect Kyubi to your 9Router gateway"),
+					description: localize('gettingStarted.nineRouter.baseUrl.description.interpolated', "Kyubi Code talks to your AI models through a 9Router gateway (an OpenAI-compatible API). Point the base URL to your gateway to get started.\n{0}", Button(localize('nineRouterOpenSettings', "Configure Gateway URL"), 'command:workbench.action.openSettings?%5B%22chat.nineRouter.baseUrl%22%5D')),
+					completionEvents: [
+						'onSettingChanged:chat.nineRouter.baseUrl',
+						'onCommand:workbench.action.openSettings'
+					],
+					media: {
+						type: 'svg', altText: 'Configure the 9Router gateway URL', path: 'customize-ai.svg'
+					},
+				},
+				{
+					id: 'nineRouterApiKey',
+					title: localize('gettingStarted.nineRouter.apiKey.title', "Add your 9Router API key"),
+					description: localize('gettingStarted.nineRouter.apiKey.description.interpolated', "Your API key is stored securely in the OS keychain — never in settings files. Once set, all models from your gateway appear in the chat model picker.\n{0}", Button(localize('nineRouterSetApiKey', "Set API Key"), 'command:chat.nineRouter.setApiKey')),
+					completionEvents: [
+						'onCommand:chat.nineRouter.setApiKey'
+					],
+					media: {
+						type: 'svg', altText: 'Set the 9Router API key', path: 'ai-powered-suggestions.svg'
+					},
+				},
+				{
+					id: 'nineRouterOpenChat',
+					title: localize('gettingStarted.nineRouter.chat.title', "Start chatting with your models"),
+					description: localize('gettingStarted.nineRouter.chat.description.interpolated', "Open the chat, pick any model from your gateway in the model picker and start coding with AI.\n{0}", Button(localize('nineRouterOpenChat', "Open Chat"), 'command:workbench.action.chat.open')),
+					completionEvents: [
+						'onCommand:workbench.action.chat.open'
+					],
+					media: {
+						type: 'svg', altText: 'Kyubi Code chat with custom models', path: 'multi-file-edits.svg'
+					},
+				},
 				{
 					id: 'pickColorTheme',
 					title: localize('gettingStarted.pickColor.title', "Choose your theme"),
@@ -276,12 +282,6 @@ export const walkthroughs: GettingStartedWalkthroughContent = [
 					],
 					media: { type: 'markdown', path: 'theme_picker', }
 				},
-				{
-					id: 'videoTutorial',
-					title: localize('gettingStarted.videoTutorial.title', "Watch video tutorials"),
-					description: localize('gettingStarted.videoTutorial.description.interpolated', "Watch the first in a series of short & practical video tutorials for VS Code's key features.\n{0}", Button(localize('watch', "Watch Tutorial"), 'https://aka.ms/vscode-getting-started-video')),
-					media: { type: 'svg', altText: 'VS Code Settings', path: 'learn.svg' },
-				}
 			]
 		}
 	},
