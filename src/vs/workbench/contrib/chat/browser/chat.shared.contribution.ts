@@ -221,6 +221,7 @@ import { AgentPluginRecommendations } from './claudePluginRecommendations.js';
 import { ChatCodeBlockContextProviderService } from './codeBlockContextProviderService.js';
 import { ExploreAgentDefaultModel } from './exploreAgentDefaultModel.js';
 import { HasByokModelsContribution } from './hasByokModelsContribution.js';
+import './nineRouter/nineRouter.contribution.js';
 import { PlanAgentDefaultModel } from './planAgentDefaultModel.js';
 import './planReviewFeedback/planReviewFeedbackEditorOverlay.js';
 import { IPlanReviewFeedbackService, PlanReviewFeedbackService } from './planReviewFeedback/planReviewFeedbackService.js';
