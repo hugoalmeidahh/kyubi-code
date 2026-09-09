@@ -51,7 +51,7 @@ export default defineConfig(
 		},
 		plugins: {
 			'local': pluginLocal,
-			'header': fixupPluginRules(/** @type {any} */ (pluginHeader)),
+			'header': fixupPluginRules(/** @type {any} */(pluginHeader)),
 		},
 		rules: {
 			'constructor-super': 'warn',
@@ -145,6 +145,30 @@ export default defineConfig(
 					'---------------------------------------------------------------------------------------------',
 					' *  Copyright (c) Microsoft Corporation. All rights reserved.',
 					' *  Licensed under the MIT License. See License.txt in the project root for license information.',
+					' *--------------------------------------------------------------------------------------------'
+				]
+			]
+		},
+	},
+	// Kyubi Code first-party additions use their own license header.
+	{
+		files: [
+			'src/vs/workbench/contrib/chat/browser/nineRouter/**/*.ts',
+		],
+		plugins: {
+			'header': fixupPluginRules(/** @type {any} */(pluginHeader)),
+		},
+		rules: {
+			'header/header': [
+				2,
+				'block',
+				[
+					'---------------------------------------------------------------------------------------------',
+					' *  Copyright (c) Hugo Almeida. All rights reserved.',
+					' *  Project: Kyubi Code - https://github.com/hugoalmeidahh/kyubi-code',
+					' *  License: MIT - https://github.com/hugoalmeidahh/kyubi-code/blob/main/LICENSE.txt',
+					' *  Author: Hugo Almeida - https://github.com/hugoalmeidahh',
+					' *  Forked from: Microsoft Code - https://github.com/microsoft/vscode',
 					' *--------------------------------------------------------------------------------------------'
 				]
 			]
