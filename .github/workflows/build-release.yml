@@ -101,7 +101,7 @@ jobs:
           Compress-Archive -Path "..\${{ matrix.output_dir }}" -DestinationPath "kyubi-code-${{ matrix.platform }}.zip"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kyubi-code-${{ matrix.platform }}
           path: |
